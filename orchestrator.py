@@ -10,15 +10,29 @@ import sys
 import time
 
 from ai_client import call_ai, call_ai_json
+import config
 
 
 # ── 配置 ─────────────────────────────────────────────
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECTS_DIR = os.path.join(BASE_DIR, "projects")
-PROMPTS_DIR = os.path.join(BASE_DIR, "prompts")
+BASE_DIR = str(config.PROJECT_ROOT)
+PROJECTS_DIR = str(config.PROJECTS_DIR)
+PROMPTS_DIR = str(config.PROMPTS_DIR)
+TEMPLATES_DIR = str(config.TEMPLATES_DIR)
 
 
 def load_prompt(name: str) -> str:
+    """
+    读取指定阶段的 prompt 文件。
+
+    Args:
+        name: prompt 文件名，不包含 .txt 后缀。
+
+    Returns:
+        prompt 文本内容。
+
+    Raises:
+        FileNotFoundError: prompt 文件不存在时抛出。
+    """
     path = os.path.join(PROMPTS_DIR, f"{name}.txt")
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
@@ -44,7 +58,10 @@ class SoftCopyrightFactory:
     def __init__(self, company_name: str, software_name: str):
         self.company = company_name
         self.software = software_name
-        safe_name = f"{company_name}_{software_name}".replace(" ", "_")[:50]
+        safe_name = (
+            f"{company_name}_{software_name}"
+            .replace(" ", "_")[:config.PROJECT_SAFE_NAME_MAX_LENGTH]
+        )
         self.project_dir = os.path.join(PROJECTS_DIR, safe_name)
         self.cost_log = {"p1": {}, "p2": {}, "p3": [], "p4": {}, "p5": {}}
         self.total_tokens = 0
@@ -131,12 +148,12 @@ class SoftCopyrightFactory:
 
             # 自动校验
             issues = []
-            if len(files) < 15:
-                issues.append(f"文件数不足: {len(files)} < 15")
-            if len(files) > 25:
-                issues.append(f"文件数过多: {len(files)} > 25")
-            if total_lines < 2500:
-                issues.append(f"目标行数不足: {total_lines} < 2500")
+            if len(files) < config.P2_MIN_FILE_COUNT:
+                issues.append(f"文件数不足: {len(files)} < {config.P2_MIN_FILE_COUNT}")
+            if len(files) > config.P2_MAX_FILE_COUNT:
+                issues.append(f"文件数过多: {len(files)} > {config.P2_MAX_FILE_COUNT}")
+            if total_lines < config.P2_MIN_TOTAL_LINES:
+                issues.append(f"目标行数不足: {total_lines} < {config.P2_MIN_TOTAL_LINES}")
             if issues:
                 print(f"   ⚠️ 校验问题: {'; '.join(issues)}")
 
@@ -155,7 +172,7 @@ class SoftCopyrightFactory:
         mock_schema = json.dumps(p1_data.get("mock_data_schema", {}), ensure_ascii=False)
 
         # 前 3 个文件作为"前哨站"检查
-        checkpoint_count = 3
+        checkpoint_count = config.P3_CHECKPOINT_COUNT
         generated = []
         code_dir = os.path.join(self.project_dir, "code")
 
@@ -168,7 +185,8 @@ class SoftCopyrightFactory:
             for dep in file_info.get("depends_on", []):
                 for g in generated:
                     if g["file_path"].endswith(dep.split("/")[-1]):
-                        related_summary += f"\n--- {dep} ---\n{g['content'][:500]}...\n"
+                        chars = config.P3_RELATED_SUMMARY_CHARS
+                        related_summary += f"\n--- {dep} ---\n{g['content'][:chars]}...\n"
 
             user_prompt = (
                 f"## 风格配置\n{style_seed}\n\n"
@@ -179,7 +197,7 @@ class SoftCopyrightFactory:
                 f"请生成这个文件的完整源代码。"
             )
 
-            max_retries = 3
+            max_retries = config.P3_MAX_RETRIES
             for attempt in range(max_retries):
                 try:
                     result = call_ai_json(user_prompt, system_prompt=system)
@@ -261,10 +279,9 @@ class SoftCopyrightFactory:
         primary = mock_schema.get("primary_entity", entities[0]["name"] if entities else "Item")
 
         # 从模板目录选择模板
-        template_dir = os.path.join(BASE_DIR, "templates")
-        template_path = os.path.join(template_dir, "dashboard.html")
+        template_path = os.path.join(TEMPLATES_DIR, "dashboard.html")
         if not os.path.exists(template_path):
-            template_path = os.path.join(BASE_DIR, "template.html")
+            template_path = str(config.DEFAULT_TEMPLATE_PATH)
 
         # 生成截图
         import subprocess
@@ -279,11 +296,11 @@ class SoftCopyrightFactory:
                 "--output", screenshots_dir,
                 "--app-name", self.software,
             ]
-            subprocess.run(cmd, timeout=120)
+            subprocess.run(cmd, timeout=config.RENDER_TIMEOUT_SECONDS)
         else:
             # 回退到 MVP 脚本
             cmd = [sys.executable, os.path.join(BASE_DIR, "screenshot_mvp.py")]
-            subprocess.run(cmd, cwd=BASE_DIR, timeout=120)
+            subprocess.run(cmd, cwd=BASE_DIR, timeout=config.RENDER_TIMEOUT_SECONDS)
 
         # 统计截图
         screenshots = [f for f in os.listdir(screenshots_dir) if f.endswith(".png")] if os.path.exists(screenshots_dir) else []
@@ -305,7 +322,7 @@ class SoftCopyrightFactory:
                 "--project-dir", self.project_dir,
                 "--output", package_dir,
             ]
-            subprocess.run(cmd, timeout=120)
+            subprocess.run(cmd, timeout=config.PACK_TIMEOUT_SECONDS)
 
         summary = f"📦 P5 封装完成\n  输出目录: {package_dir}"
         approve("P5 - 文档封装", summary)

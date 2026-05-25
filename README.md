@@ -60,6 +60,43 @@ softcopyright-mvp/
 - playwright
 - python-docx（用于生成软著申报 Word 文档）
 
+## 环境变量配置
+
+项目启动时会自动读取根目录下的 `.env` 文件，不需要额外安装 `python-dotenv`。
+
+- `.env`：本地真实配置文件，已加入 `.gitignore`，不要提交密钥或私有路径。
+- `.env.example`：可提交的配置模板，完整列出所有环境变量，并在每个变量上方说明用途。
+- `SOFTCOPYRIGHT_AI_API_KEY` 留空时，会按 `SOFTCOPYRIGHT_AUTH_PATH` 和
+  `SOFTCOPYRIGHT_AUTH_PROVIDER` 从本地认证文件读取 API key。
+
+常用配置项：
+
+```bash
+# AI 服务地址、模型和调用参数
+SOFTCOPYRIGHT_AI_API_URL=https://inference-api.nousresearch.com/v1/chat/completions
+SOFTCOPYRIGHT_AI_MODEL=xiaomi/mimo-v2-pro
+SOFTCOPYRIGHT_AI_TIMEOUT_SECONDS=300
+
+# 项目输出、prompt 和模板路径
+SOFTCOPYRIGHT_PROJECTS_DIR=projects
+SOFTCOPYRIGHT_PROMPTS_DIR=prompts
+SOFTCOPYRIGHT_DEFAULT_TEMPLATE_PATH=template.html
+SOFTCOPYRIGHT_DEFAULT_DATA_PATH=data.json
+
+# 截图渲染参数
+SOFTCOPYRIGHT_RENDER_OUTPUT_DIR=render_outputs
+SOFTCOPYRIGHT_TAILWIND_CDN_URL=https://cdn.tailwindcss.com
+SOFTCOPYRIGHT_VIEWPORT_WIDTH=1280
+SOFTCOPYRIGHT_VIEWPORT_HEIGHT=800
+SOFTCOPYRIGHT_THEME_COLOR=#1E40AF
+
+# Word 文档和代码截取参数
+SOFTCOPYRIGHT_DOC_BODY_FONT=仿宋_GB2312
+SOFTCOPYRIGHT_SOURCE_FRONT_PAGES=30
+SOFTCOPYRIGHT_SOURCE_BACK_PAGES=30
+SOFTCOPYRIGHT_SOURCE_LINES_PER_PAGE=50
+```
+
 ## 常用入口
 
 ```bash
@@ -74,4 +111,7 @@ python checker.py projects/<项目名>
 
 # 生成申报文档
 python packer.py --project-dir projects/<项目名> --output projects/<项目名>/package
+
+# 补生成缺失代码文件，也可通过 SOFTCOPYRIGHT_TARGET_PROJECT_DIR 配置目标项目目录
+python generate_remaining.py projects/<项目名>
 ```

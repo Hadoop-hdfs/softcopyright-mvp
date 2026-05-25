@@ -13,21 +13,23 @@ from datetime import datetime
 from jinja2 import Template
 from playwright.async_api import async_playwright
 
+import config
+from renderer import apply_template_settings, build_cjk_font_style
+
 
 async def run_mvp_screenshot():
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    output_dir = os.path.join(base_dir, "render_outputs")
+    output_dir = str(config.RENDER_OUTPUT_DIR)
     os.makedirs(output_dir, exist_ok=True)
 
     # ── 1. 读取数据和模板 ──────────────────────────────
-    with open(os.path.join(base_dir, "data.json"), "r", encoding="utf-8") as f:
+    with open(config.DEFAULT_DATA_PATH, "r", encoding="utf-8") as f:
         data = json.load(f)
-    with open(os.path.join(base_dir, "template.html"), "r", encoding="utf-8") as f:
+    with open(config.DEFAULT_TEMPLATE_PATH, "r", encoding="utf-8") as f:
         html_template = f.read()
 
     # ── 2. Jinja2 渲染 ─────────────────────────────────
     template = Template(html_template)
-    rendered_html = template.render(**data)
+    rendered_html = template.render(**apply_template_settings(data))
 
     # 保存渲染后的 HTML（方便调试）
     html_path = os.path.join(output_dir, "rendered.html")
@@ -37,25 +39,20 @@ async def run_mvp_screenshot():
 
     # ── 3. Playwright 截图 ──────────────────────────────
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page(viewport={"width": 1280, "height": 800})
+        browser = await p.chromium.launch(headless=config.PLAYWRIGHT_HEADLESS)
+        page = await browser.new_page(
+            viewport={"width": config.VIEWPORT_WIDTH, "height": config.VIEWPORT_HEIGHT}
+        )
 
         try:
             await page.set_content(rendered_html, wait_until="networkidle")
 
             # 注入字体回退（防止中文方块）
-            await page.add_style_tag(content="""
-                @font-face {
-                    font-family: 'CJKFallback';
-                    src: local('Noto Sans CJK SC'), local('WenQuanYi Micro Hei'),
-                         local('Microsoft YaHei'), local('PingFang SC');
-                }
-                * { font-family: 'CJKFallback', sans-serif !important; }
-            """)
+            await page.add_style_tag(content=build_cjk_font_style())
 
             # 等待 Tailwind 渲染
             await page.wait_for_load_state("networkidle")
-            await page.wait_for_timeout(1000)
+            await page.wait_for_timeout(config.RENDER_WAIT_MS)
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -66,8 +63,11 @@ async def run_mvp_screenshot():
 
             # 截图 2：点击"能耗分析"菜单
             try:
-                await page.click("text=能耗分析", timeout=3000)
-                await page.wait_for_timeout(500)
+                await page.click(
+                    f"text={config.MVP_CLICK_MENU_TEXT}",
+                    timeout=config.MENU_CLICK_TIMEOUT_MS,
+                )
+                await page.wait_for_timeout(config.SUBMENU_WAIT_MS)
                 path2 = os.path.join(output_dir, f"02_analysis_{timestamp}.png")
                 await page.screenshot(path=path2, full_page=False)
                 print(f"✅ 截图 2（能耗分析）：{path2}")

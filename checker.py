@@ -9,6 +9,8 @@ import json
 from collections import Counter
 from difflib import SequenceMatcher
 
+import config
+
 
 def extract_ast_features(code: str) -> dict:
     """从 Python 代码提取 AST 结构特征"""
@@ -144,7 +146,7 @@ def check_project(project_dir: str, existing_dirs: list = None) -> dict:
                         with open(os.path.join(root, f), "r", encoding="utf-8") as fh:
                             exist_code = fh.read()
                         sim = ast_similarity(current_codes[f], exist_code)
-                        if sim > 0.3:
+                        if sim > config.SIMILARITY_WARN_THRESHOLD:
                             results["similarities"].append({
                                 "file": f,
                                 "other_project": os.path.basename(exist_dir),
@@ -153,7 +155,7 @@ def check_project(project_dir: str, existing_dirs: list = None) -> dict:
 
     # 最终判定
     max_sim = max((s["similarity"] for s in results["similarities"]), default=0)
-    if max_sim > 0.4:
+    if max_sim > config.SIMILARITY_FAIL_THRESHOLD:
         results["passed"] = False
 
     return results

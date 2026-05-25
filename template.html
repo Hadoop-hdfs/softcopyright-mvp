@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>{{ app_name }} - 管理后台</title>
-<script src="https://cdn.tailwindcss.com"></script>
+<script src="{{ tailwind_cdn_url | default('https://cdn.tailwindcss.com') }}"></script>
 <style>
 body { font-family: "Noto Sans CJK SC", "WenQuanYi Micro Hei", "Microsoft YaHei", "PingFang SC", sans-serif; }
 .sidebar { background-color: {{ theme_color_hex }}; }
@@ -22,7 +22,7 @@ body { font-family: "Noto Sans CJK SC", "WenQuanYi Micro Hei", "Microsoft YaHei"
     {% endfor %}
   </nav>
   <div class="absolute bottom-0 p-4 text-xs text-white/50 border-t border-white/10 w-64">
-    版本 v2.4.1 · 企业版
+    {{ version_text | default('版本 v2.4.1 · 企业版') }}
   </div>
 </div>
 
@@ -32,7 +32,7 @@ body { font-family: "Noto Sans CJK SC", "WenQuanYi Micro Hei", "Microsoft YaHei"
   <header class="bg-white shadow-sm p-4 flex justify-between items-center">
     <span class="text-gray-600">当前模块：控制面板 / 概览</span>
     <div class="flex items-center space-x-4">
-      <span class="text-sm text-gray-500">管理员：Admin</span>
+      <span class="text-sm text-gray-500">管理员：{{ admin_name | default('Admin') }}</span>
       <div class="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold" style="background-color: {{ theme_color_hex }}">A</div>
     </div>
   </header>
@@ -58,7 +58,7 @@ body { font-family: "Noto Sans CJK SC", "WenQuanYi Micro Hei", "Microsoft YaHei"
     <div class="bg-white rounded-lg shadow-sm">
       <div class="p-4 border-b font-bold text-gray-700 flex justify-between items-center">
         <span>实时业务监控列表</span>
-        <span class="text-xs text-gray-400">自动刷新：30s</span>
+        <span class="text-xs text-gray-400">{{ refresh_text | default('自动刷新：30s') }}</span>
       </div>
       <table class="w-full text-left">
         <thead class="bg-gray-50 text-gray-600 text-sm">
@@ -88,7 +88,7 @@ body { font-family: "Noto Sans CJK SC", "WenQuanYi Micro Hei", "Microsoft YaHei"
 
     <!-- 底部信息 -->
     <div class="mt-4 flex justify-between text-xs text-gray-400">
-      <span>数据源：Modbus-TCP / OPC-UA 双通道</span>
+      <span>{{ data_source_text | default('数据源：Modbus-TCP / OPC-UA 双通道') }}</span>
       <span>最近同步：{{ table_data[0].time if table_data else 'N/A' }}</span>
     </div>
   </main>

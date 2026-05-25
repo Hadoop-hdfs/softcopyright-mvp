@@ -14,6 +14,54 @@ from datetime import datetime, timedelta
 from jinja2 import Template
 from playwright.async_api import async_playwright
 
+import config
+
+
+def build_template_settings() -> dict:
+    """
+    构造模板展示配置。
+
+    Returns:
+        模板需要的版本、管理员、刷新和数据源文案。
+    """
+    return {
+        "tailwind_cdn_url": config.TAILWIND_CDN_URL,
+        "version_text": config.TEMPLATE_VERSION_TEXT,
+        "admin_name": config.TEMPLATE_ADMIN_NAME,
+        "refresh_text": config.TEMPLATE_REFRESH_TEXT,
+        "data_source_text": config.TEMPLATE_DATA_SOURCE_TEXT,
+    }
+
+
+def apply_template_settings(data: dict) -> dict:
+    """
+    将环境变量中的模板展示配置合并到渲染数据。
+
+    Args:
+        data: 原始渲染数据。
+
+    Returns:
+        合并模板展示配置后的新字典。
+    """
+    return {**data, **build_template_settings()}
+
+
+def build_cjk_font_style() -> str:
+    """
+    构造中文字体回退 CSS。
+
+    Returns:
+        可注入页面的 CSS 字符串。
+    """
+    local_fonts = ", ".join(f"local('{font_name}')" for font_name in config.CJK_FONT_FAMILY)
+    return f"""
+        @font-face {{
+            font-family: 'CJKFallback';
+            src: {local_fonts};
+        }}
+        * {{ font-family: 'CJKFallback', sans-serif !important; }}
+    """
+
 
 def generate_mock_value(field: dict) -> str:
     """根据字段规则生成假数据"""
@@ -46,8 +94,9 @@ def generate_mock_value(field: dict) -> str:
             return mock_rule if mock_rule else f"数据_{random.randint(1, 100)}"
 
 
-def build_dashboard_data(p1_data: dict, app_name: str, theme_color: str = "#1E40AF") -> dict:
+def build_dashboard_data(p1_data: dict, app_name: str, theme_color: str | None = None) -> dict:
     """从 p1_insight.json 构造仪表盘渲染数据"""
+    selected_theme_color = theme_color or config.THEME_COLOR
     mock_schema = p1_data.get("mock_data_schema", {})
     entities = mock_schema.get("entities", [])
     features = p1_data.get("feature_outline", [])
@@ -88,12 +137,13 @@ def build_dashboard_data(p1_data: dict, app_name: str, theme_color: str = "#1E40
 
     return {
         "app_name": app_name,
-        "theme_color_hex": theme_color,
+        "theme_color_hex": selected_theme_color,
         "menu": menu_items,
         "dashboard_cards": dashboard_cards,
         "table_data": table_data,
         "entities": entities,
         "features": features,
+        **build_template_settings(),
     }
 
 
@@ -114,20 +164,15 @@ async def render_and_screenshot(data: dict, template_path: str, output_dir: str)
 
     screenshots = []
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page(viewport={"width": 1280, "height": 800})
+        browser = await p.chromium.launch(headless=config.PLAYWRIGHT_HEADLESS)
+        page = await browser.new_page(
+            viewport={"width": config.VIEWPORT_WIDTH, "height": config.VIEWPORT_HEIGHT}
+        )
 
         try:
             await page.set_content(rendered_html, wait_until="networkidle")
-            await page.add_style_tag(content="""
-                @font-face {
-                    font-family: 'CJKFallback';
-                    src: local('Noto Sans CJK SC'), local('WenQuanYi Micro Hei'),
-                         local('Microsoft YaHei'), local('PingFang SC');
-                }
-                * { font-family: 'CJKFallback', sans-serif !important; }
-            """)
-            await page.wait_for_timeout(1000)
+            await page.add_style_tag(content=build_cjk_font_style())
+            await page.wait_for_timeout(config.RENDER_WAIT_MS)
 
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -141,7 +186,7 @@ async def render_and_screenshot(data: dict, template_path: str, output_dir: str)
                 menu_items = await page.query_selector_all("nav a")
                 if len(menu_items) > 1:
                     await menu_items[1].click()
-                    await page.wait_for_timeout(500)
+                    await page.wait_for_timeout(config.SUBMENU_WAIT_MS)
                     p2 = os.path.join(output_dir, f"02_submenu_{ts}.png")
                     await page.screenshot(path=p2, full_page=False)
                     screenshots.append(p2)
@@ -161,26 +206,27 @@ async def render_and_screenshot(data: dict, template_path: str, output_dir: str)
 
 def main():
     parser = argparse.ArgumentParser(description="软著工厂 - 渲染器")
-    parser.add_argument("--template", default="template.html", help="Jinja2 模板路径")
+    parser.add_argument("--template", default=str(config.DEFAULT_TEMPLATE_PATH), help="Jinja2 模板路径")
     parser.add_argument("--data", default="", help="p1_insight.json 路径")
-    parser.add_argument("--output", default="render_outputs", help="截图输出目录")
+    parser.add_argument("--output", default=str(config.RENDER_OUTPUT_DIR), help="截图输出目录")
     parser.add_argument("--app-name", default="", help="应用名称（覆盖 data 中的）")
-    parser.add_argument("--theme", default="#1E40AF", help="主题色")
+    parser.add_argument("--theme", default=config.THEME_COLOR, help="主题色")
     args = parser.parse_args()
-
-    base_dir = os.path.dirname(os.path.abspath(__file__))
 
     # 加载数据
     if args.data and os.path.exists(args.data):
         with open(args.data, "r", encoding="utf-8") as f:
             p1_data = json.load(f)
+        app_name = args.app_name or p1_data.get("company_profile", {}).get("name", "管理系统")
+        render_data = build_dashboard_data(p1_data, app_name, args.theme)
     else:
         # 使用默认 MVP 数据
-        with open(os.path.join(base_dir, "data.json"), "r", encoding="utf-8") as f:
-            return json.load(f)
-
-    app_name = args.app_name or p1_data.get("company_profile", {}).get("name", "管理系统")
-    render_data = build_dashboard_data(p1_data, app_name, args.theme)
+        with open(config.DEFAULT_DATA_PATH, "r", encoding="utf-8") as f:
+            render_data = json.load(f)
+        if args.app_name:
+            render_data["app_name"] = args.app_name
+        render_data.setdefault("theme_color_hex", args.theme)
+        render_data = apply_template_settings(render_data)
 
     screenshots = asyncio.run(render_and_screenshot(render_data, args.template, args.output))
 

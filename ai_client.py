@@ -8,22 +8,37 @@ import os
 import time
 import urllib.request
 
+import config
+
 
 def _load_api_key() -> str:
-    """从 auth.json 读取 Nous API key"""
-    auth_path = os.path.expanduser("~/.hermes/auth.json")
-    with open(auth_path, "r") as f:
+    """
+    从环境变量或本地 auth.json 读取 AI API key。
+
+    Returns:
+        AI API key 字符串。
+
+    Raises:
+        FileNotFoundError: 未配置环境变量且 auth.json 不存在时抛出。
+        KeyError: auth.json 中缺少指定 provider 或 agent_key 时抛出。
+    """
+    if config.AI_API_KEY:
+        return config.AI_API_KEY
+
+    auth_path = os.path.expanduser(str(config.AI_AUTH_PATH))
+    with open(auth_path, "r", encoding="utf-8") as f:
         auth = json.load(f)
-    return auth["providers"]["nous"]["agent_key"]
+    return auth["providers"][config.AI_AUTH_PROVIDER]["agent_key"]
 
 
-def call_ai(prompt: str, system_prompt: str = "", model: str = "xiaomi/mimo-v2-pro") -> dict:
+def call_ai(prompt: str, system_prompt: str = "", model: str | None = None) -> dict:
     """
     调用 AI 完成单次推理。
     返回: {"content": str, "tokens": int, "elapsed": float}
     """
     api_key = _load_api_key()
-    url = "https://inference-api.nousresearch.com/v1/chat/completions"
+    url = config.AI_API_URL
+    selected_model = model or config.AI_MODEL
 
     messages = []
     if system_prompt:
@@ -31,10 +46,10 @@ def call_ai(prompt: str, system_prompt: str = "", model: str = "xiaomi/mimo-v2-p
     messages.append({"role": "user", "content": prompt})
 
     payload = json.dumps({
-        "model": model,
+        "model": selected_model,
         "messages": messages,
-        "max_tokens": 8192,
-        "temperature": 0.7,
+        "max_tokens": config.AI_MAX_TOKENS,
+        "temperature": config.AI_TEMPERATURE,
     }).encode("utf-8")
 
     req = urllib.request.Request(url, data=payload, method="POST")
@@ -42,7 +57,7 @@ def call_ai(prompt: str, system_prompt: str = "", model: str = "xiaomi/mimo-v2-p
     req.add_header("Authorization", f"Bearer {api_key}")
 
     start = time.time()
-    with urllib.request.urlopen(req, timeout=300) as resp:
+    with urllib.request.urlopen(req, timeout=config.AI_TIMEOUT_SECONDS) as resp:
         result = json.loads(resp.read().decode("utf-8"))
     elapsed = time.time() - start
 
@@ -57,7 +72,7 @@ def call_ai(prompt: str, system_prompt: str = "", model: str = "xiaomi/mimo-v2-p
     }
 
 
-def call_ai_json(prompt: str, system_prompt: str = "", model: str = "xiaomi/mimo-v2-pro") -> dict:
+def call_ai_json(prompt: str, system_prompt: str = "", model: str | None = None) -> dict:
     """调用 AI 并解析 JSON 输出"""
     full_system = (system_prompt + "\n\n" if system_prompt else "")
     full_system += "你必须只输出合法的 JSON，不要输出任何其他文字、解释或 markdown 代码块标记。"
@@ -74,7 +89,8 @@ def call_ai_json(prompt: str, system_prompt: str = "", model: str = "xiaomi/mimo
     try:
         parsed = json.loads(content)
     except json.JSONDecodeError as e:
-        raise ValueError(f"AI 输出不是合法 JSON: {e}\n原始输出:\n{content[:500]}")
+        preview_chars = config.AI_JSON_ERROR_PREVIEW_CHARS
+        raise ValueError(f"AI 输出不是合法 JSON: {e}\n原始输出:\n{content[:preview_chars]}")
 
     return {**result, "parsed": parsed}
 
