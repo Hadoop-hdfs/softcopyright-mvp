@@ -27,6 +27,21 @@ def set_font(run, font_name: str | None = None, font_size: float | None = None, 
     run._element.rPr.rFonts.set(qn('w:eastAsia'), selected_font_name)
 
 
+def build_source_part_heading(part_name: str, page_count: int) -> str:
+    """
+    构造源代码文档截取分段标题。
+
+    Args:
+        part_name: 分段名称，例如“第一部分”或“第二部分”。
+        page_count: 当前分段配置的页数。
+
+    Returns:
+        带有前后方向和页数的标题文本。
+    """
+    direction = "后" if part_name.startswith("第二") else "前"
+    return f"{part_name}（{direction} {page_count} 页）"
+
+
 def add_page_header_footer(
     doc,
     software_name: str,
@@ -51,7 +66,7 @@ def add_page_header_footer(
 
 
 def create_source_code_doc(code_dir: str, output_path: str, software_name: str):
-    """生成源代码文档（前30页+后30页）"""
+    """生成源代码文档（按配置截取前后页数）"""
     doc = Document()
 
     # 设置默认字体
@@ -90,7 +105,7 @@ def create_source_code_doc(code_dir: str, output_path: str, software_name: str):
             lines = f.readlines()
             all_lines.append((rel_path, lines))
 
-    # 前 30 页（每页约 50 行 = 1500 行）
+    # 按配置估算每页行数，用于决定源代码前后截取范围。
     LINES_PER_PAGE = config.SOURCE_LINES_PER_PAGE
     FRONT_PAGES = config.SOURCE_FRONT_PAGES
     BACK_PAGES = config.SOURCE_BACK_PAGES
@@ -113,7 +128,7 @@ def create_source_code_doc(code_dir: str, output_path: str, software_name: str):
         line_count = 0
         front_limit = FRONT_PAGES * LINES_PER_PAGE
 
-        doc.add_heading("第一部分（前 30 页）", level=2)
+        doc.add_heading(build_source_part_heading("第一部分", FRONT_PAGES), level=2)
         for rel_path, lines in all_lines:
             if line_count >= front_limit:
                 break
@@ -131,7 +146,7 @@ def create_source_code_doc(code_dir: str, output_path: str, software_name: str):
 
         # 截取后 BACK_PAGES 页
         doc.add_page_break()
-        doc.add_heading("第二部分（后 30 页）", level=2)
+        doc.add_heading(build_source_part_heading("第二部分", BACK_PAGES), level=2)
         back_limit = BACK_PAGES * LINES_PER_PAGE
         back_start = max(0, total_lines - back_limit)
 

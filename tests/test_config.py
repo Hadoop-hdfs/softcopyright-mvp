@@ -1,5 +1,6 @@
 """配置读取模块测试。"""
 
+import importlib
 import os
 import tempfile
 import unittest
@@ -19,6 +20,8 @@ class ConfigTestCase(unittest.TestCase):
             "SOFTCOPYRIGHT_TEST_RATIO",
             "SOFTCOPYRIGHT_TEST_ENABLED",
             "SOFTCOPYRIGHT_TEST_EXISTING",
+            "SOFTCOPYRIGHT_AI_API_KEY",
+            "SOFTCOPYRIGHT_AUTH_PATH",
         ]
         for key in self.keys:
             os.environ.pop(key, None)
@@ -66,6 +69,18 @@ class ConfigTestCase(unittest.TestCase):
 
         self.assertTrue(resolved_path.is_absolute())
         self.assertEqual(resolved_path.name, "render_outputs")
+
+    def test_ai_api_key_environment_value_skips_auth_file(self) -> None:
+        """配置 API key 时，应直接使用环境变量而不读取本地认证文件。"""
+        os.environ["SOFTCOPYRIGHT_AI_API_KEY"] = "env_api_key_for_test"
+        os.environ["SOFTCOPYRIGHT_AUTH_PATH"] = "/private/tmp/missing_auth_for_test.json"
+
+        import ai_client
+
+        importlib.reload(config)
+        importlib.reload(ai_client)
+
+        self.assertEqual(ai_client._load_api_key(), "env_api_key_for_test")
 
 
 if __name__ == "__main__":

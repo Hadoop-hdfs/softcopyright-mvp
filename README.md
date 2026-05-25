@@ -66,6 +66,8 @@ softcopyright-mvp/
 
 - `.env`：本地真实配置文件，已加入 `.gitignore`，不要提交密钥或私有路径。
 - `.env.example`：可提交的配置模板，完整列出所有环境变量，并在每个变量上方说明用途。
+- `SOFTCOPYRIGHT_ENV_FILE` 只能在启动脚本前通过系统环境变量指定；写在 `.env`
+  文件内部不会改变本次加载路径。
 - `SOFTCOPYRIGHT_AI_API_KEY` 留空时，会按 `SOFTCOPYRIGHT_AUTH_PATH` 和
   `SOFTCOPYRIGHT_AUTH_PROVIDER` 从本地认证文件读取 API key。
 
